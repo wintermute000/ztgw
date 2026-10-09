@@ -1,0 +1,126 @@
+#!/bin/bash
+# This script will:
+# 1. Install the Zscaler Root CA certificate into the system trust store.
+# 2. Update the instance and install the Nginx web server.
+# 3. Create the index.html file with SSI directives.
+# 4. Configure Nginx to enable Server-Side Includes (SSI).
+# 5. Start the Nginx service and enable it on boot.
+
+# --- Certificate Installation ---
+# Define the certificate content using a HEREDOC
+ZS_ROOT_CA_CERT=$(cat <<'EOT'
+-----BEGIN CERTIFICATE-----
+MIIE6DCCA9CgAwIBAgIJANu+mC2Jt3uTMA0GCSqGSIb3DQEBCwUAMIGhMQswCQYD
+VQQGEwJVUzETMBEGA1UECBMKQ2FsaWZvcm5pYTERMA8GA1UEBxMIU2FuIEpvc2Ux
+FTATBgNVBAoTDFpzY2FsZXIgSW5jLjEVMBMGA1UECxMMWnNjYWxlciBJbmMuMRgw
+FgYDVQQDEw9ac2NhbGVyIFJvb3QgQ0ExIjAgBgkqhkiG9w0BCQEWE3N1cHBvcnRA
+enNjYWxlci5jb20wIBcNMjUwMjAyMTYzODIwWhgPMjA1MjA2MjAxNjM4MjBaMIGh
+MQswCQYDVQQGEwJVUzETMBEGA1UECBMKQ2FsaWZvcm5pYTERMA8GA1UEBxMIU2Fu
+IEpvc2UxFTATBgNVBAoTDFpzY2FsZXIgSW5jLjEVMBMGA1UECxMMWnNjYWxlciBJ
+bmMuMRgwFgYDVQQDEw9ac2NhbGVyIFJvb3QgQ0ExIjAgBgkqhkiG9w0BCQEWE3N1
+cHBvcnRAenNjYWxlci5jb20wggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIB
+AQCpPtJNLFlFOAQUV/p2gdqNJzW+TmObOYzoFa46jTjgSxpNz15URX8eMf/UNbNm
+1yt9OP6eLbTlqkxOUoFbdRhH6XIsdD0WhmINdhcrymgpJXn5ObRWWz/kpvyaSFVW
+q/suBgSa8Rjsc9j6LWcQZkJrjplcI6iEnSYES0H0lWWkMg76c3SFQwBhh1nUplYI
+w1/kn9pNmJKGyis3YDfyJI6F136ZxEziI0veCwu731eEqdGoqgd4fzeVV1+7VcF6
+hDPPlXqADeRtG+EPCgiVMF4xrmXjJF0kB92mRsXOqLBKA12FvFMedhiisPMp+vas
+QUx2wxTQMd14Bl/vXX7UK6e5AgMBAAGjggEdMIIBGTAdBgNVHQ4EFgQUubfdSs3D
+DgyGnV3f7BwEacVOmN8wDwYDVR0TAQH/BAUwAwEB/zCB1gYDVR0jBIHOMIHLgBS5
+t91KzcMODIadXd/sHARpxU6Y36GBp6SBpDCBoTELMAkGA1UEBhMCVVMxEzARBgNV
+BAgTCkNhbGlmb3JuaWExETAPBgNVBAcTCFNhbiBKb3NlMRUwEwYDVQQKEwxac2Nh
+bGVyIEluYy4xFTATBgNVBAsTDFpzY2FsZXIgSW5jLjEYMBYGA1UEAxMPWnNjYWxl
+ciBSb290IENBMSIwIAYJKoZIhvcNAQkBFhNzdXBwb3J0QHpzY2FsZXIuY29tggkA
+276YLYm3e5MwDgYDVR0PAQH/BAQDAgGGMA0GCSqGSIb3DQEBCwUAA4IBAQBZ257u
+6xcDnfq33Dhdi0h/g+5kz5wto+0w1U/y2V3bAfwOzvSiKfrOGEssYNVdv17qSOUC
+jFs/kvCmZnS2ZAr/iAxeD8qkC6Zb5552LRCiV4XHBaeN6Cd+YTJMgVKmBxFrsxlE
+PmauxO1aIwTf3eQmD+n5Yn7MkKClIedkfrwHq4s3ZvyvyplAwjSwyesmEz/5Gdk9
+XdhsfrIlWq8DyJijNGysBOceYOB6jmCijtwFG02ubAfiIMZ/BRC8+O7wjzDgRALz
+OC2+mQytSkKo8K6MskfEdjQGZctKaPISG344PQY/y4zKBf1JNpSfsTBzaI9lj7PK
+m7q2TzMp8s5DuGbK
+-----END CERTIFICATE-----
+EOT
+)
+
+# The directory for custom CA certificates on Amazon Linux 2023.
+CERT_DIR="/etc/pki/ca-trust/source/anchors"
+CERT_FILE="${CERT_DIR}/zscaler-root-ca.pem"
+
+# Create the certificate file. Use sudo for permission to write to the directory.
+echo "$ZS_ROOT_CA_CERT" | sudo tee "$CERT_FILE" > /dev/null
+
+# Update the system's trust store.
+sudo update-ca-trust
+
+# --- System Update and Nginx Installation ---
+echo "Updating packages and installing Nginx..."
+yum update -y
+yum install -y nginx
+
+# Create the index.html file with your content in the default Nginx webroot
+echo "Creating Nginx index.html with SSI..."
+cat <<'EOT' > /usr/share/nginx/html/index.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Information</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5;
+            color: #1c1e21;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            text-align: center;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 2rem 4rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            border: 1px solid #dddfe2;
+        }
+        h1 {
+            color: #0d6efd;
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+        ul {
+            list-style-type: none;
+            padding: 0;
+            font-size: 1.25rem;
+        }
+        li {
+            margin: 1rem 0;
+        }
+        strong {
+            color: #495057;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Server Details</h1>
+        <p>This page is being served from:</p>
+        <ul>
+            <!-- Nginx will replace these comments with dynamic values -->
+            <li><strong>Hostname:</strong> <!--# echo var="hostname" --></li>
+            <li><strong>Server IP Address:</strong> <!--# echo var="server_addr" --></li>
+        </ul>
+    </div>
+</body>
+</html>
+EOT
+
+# Activate SSI in the default Nginx server block.
+echo "Enabling SSI in Nginx configuration..."
+sed -i '/^\s*server\s*{/a \ \ \ \ ssi on;' /etc/nginx/nginx.conf
+
+# Enable and start the Nginx service
+echo "Starting and enabling Nginx service..."
+systemctl enable nginx
+systemctl start nginx
